@@ -66,6 +66,24 @@ create_socket(char *port) {
 }
 
 void
+save_topic(char *topic_name) {
+    /* add CLA here */
+    char *file_name = NULL;
+    char *folder_name = "1/";
+    file_name = malloc (strlen(topic_name) + strlen(folder_name) + 1);
+
+    strcat(file_name, folder_name);
+    strcat(file_name, topic_name);
+    printf("creating file to this path %s\n", file_name);
+
+    FILE *fp;
+    fp = fopen(file_name, "w");
+    fclose(fp);
+
+    printf("Topic added successfully\n");
+}
+
+void
 temp_accept() {
     cfd = accept(sfd, (__TYPE_CAST *) &clt_addr, &addrlen);
 
@@ -79,4 +97,7 @@ temp_accept() {
     printf("TOPIC IS = %s\n", m.topic);
     printf("WHO IS = %d\n", m.whois);
     printf("SEQ NO = %d\n", m.seqNo);
+
+    printf("Saving topic\n");
+    save_topic(m.topic);
 }
