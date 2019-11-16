@@ -1,9 +1,10 @@
 #include "funBro.h"
 
+#define MESSAGE_PATH "Messages1/"
+
 int
 main (int argN, char *argV[]) {
     check_arg(argN);
-    MESSAGE_PATH = argV[4];
 
     create_client_socket(argV[1], argV[3]);
 

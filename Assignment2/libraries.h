@@ -18,6 +18,9 @@
 #include <string.h>
 
 #define MESSAGE_SIZE 512
+#define CONTENT_SIZE 333
+#define TOPIC_SIZE 20
+#define TOTAL_FDS 20
 #define __TYPE_CAST struct sockaddr
 
 #define IS_PUBLISHER 1
@@ -28,5 +31,17 @@
 struct Message {
     int whois;
     int seqNo;
-    char topic[20];
+    int isFile;
+    int isQuery;
+    char topic[TOPIC_SIZE];
+    char content[CONTENT_SIZE];
 };
+
+char *
+string_con(char *__a, char *__b) {
+    char *__c = NULL;
+    __c = malloc(strlen(__a) + strlen(__b) + 1);
+
+    strcat(__c, __a);
+    strcat(__c, __b);
+}
