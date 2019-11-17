@@ -33,8 +33,10 @@ struct Message {
     int seqNo;
     int isFile;
     int isQuery;
+    int gotIt;
     char topic[TOPIC_SIZE];
     char content[CONTENT_SIZE];
+    int BROKER_ID;
 };
 
 char *

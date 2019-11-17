@@ -45,16 +45,16 @@ runSubscriber(char *ipAdd, char *port) {
 
 		switch (user_input) {
 			case 1:
-				subscribe_topic();
+				get_Message(port);
 				break;
 			case 2:
-				get_Message();
+				get_Message(port);
 				break;
 			case 3:
-				get_Next_Message();
+				get_Message(port);
 				break;
 			case 4:
-				get_All_Messages();
+				get_All_Messages(port);
 				break;
 			case 5:
 				close(sfd);

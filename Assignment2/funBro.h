@@ -18,7 +18,11 @@ int N;
 int nready;
 int connected_clients;
 
+char *ipAdd = NULL;
+char *port = NULL;
 char *MESSAGE_PATH = NULL;
+int my_ID;
+int next_BROKER;
 
 struct Message m;
 fd_set all_set, rset;
@@ -112,6 +116,20 @@ temp_accept() {
 
 void
 connect_to_broker() {
+    // socket create
+	leftFD = socket(AF_INET, SOCK_STREAM, 0);
+	if (leftFD == -1) { 
+		printf("socket creation failed...\n"); 
+		close(leftFD);
+		return;
+	}
+	
+	bzero(&servaddr, sizeof(servaddr));
+
+	servaddr.sin_family = AF_INET;
+	servaddr.sin_addr.s_addr = inet_addr(ipAdd); 
+	servaddr.sin_port = htons(atoi(port));
+    
     // connect the client socket to server socket 
 	if (connect(leftFD, (__TYPE_CAST *) &servaddr, sizeof(servaddr)) != 0) { 
 		printf("connection with the server failed...\n");
@@ -122,6 +140,7 @@ connect_to_broker() {
 
 void
 handle_PUBLISHER(int confd) {
+    printf("[ handling PUBLISHER ]\n\n");
     /* get publisher data, and store it */
     if (m.isFile == 0) 
         save_topic(m.topic, m.content);
@@ -130,9 +149,48 @@ handle_PUBLISHER(int confd) {
 
 void
 handle_SUBSCRIBER(int confd) {
+    printf("[ handling SUBSCRIBER ]\n\n");
+    printf("Broker ID %d\n\n", my_ID);
+    
+    m.BROKER_ID = my_ID;
     /* search topic in your directory first */
     if (get_counter_hash(m.topic) == -1) {
         /* topic doesn't exist */
+        printf("Topic doesn't EXIST\n");
+        printf("Connecting to Broker\n");
+
+        connect_to_broker();
+        
+        struct Message Q;
+        bzero(&Q, sizeof(Q));
+
+        Q.whois = IS_BROKER;
+        Q.seqNo = -1;
+        Q.isQuery = 1;
+        Q.gotIt = 0;
+        Q.BROKER_ID = m.BROKER_ID;
+        strcpy(Q.topic, m.topic);
+
+        printf("Sending Query Message to Broker\n");
+        void *ptr = &Q;
+        write(leftFD, (char *) ptr, sizeof(Q));
+
+        printf("Waiting for Replay from Broker\n");
+
+        struct Message response;
+        bzero(&response, sizeof(response));
+
+        printf("received response from Broker\n");
+        read(leftFD, &response, MESSAGE_SIZE);
+        perror("Error leftFD");
+        printf("response = %s\n", response.content);
+
+        printf("Sending Received response to subscriber\n");
+        void *ptr2 = &response;
+        write(confd, (char *) ptr2, sizeof(response));
+        perror("Error confd");
+
+        close(leftFD);
     } else {
         /* topic exists */
         printf("Topic EXISTS\n");
@@ -161,6 +219,7 @@ handle_SUBSCRIBER(int confd) {
 
         printf("got data = %s\n", response.content);
 
+        response.gotIt = 1;
         response.whois = IS_SUBSCRIBER;
 
         chdir("..");
@@ -174,7 +233,100 @@ handle_SUBSCRIBER(int confd) {
 
 void
 handle_BROKER(int confd) {
+    printf("[ handling BROKER ]\n\n");
+    printf("[next broker = %d] and Message Broker id %d\n", next_BROKER, m.BROKER_ID);
 
+    /* In this function we will handle Query Messages */
+    if (get_counter_hash(m.topic) == -1) {
+        /* Topic doesn't EXIST */
+        printf("Topic doesn't EXIST\n");
+
+        /* If we are not at the end of our Topology */
+        if (m.BROKER_ID != next_BROKER) {
+            connect_to_broker();
+
+            struct Message Q;
+            bzero(&Q, sizeof(Q));
+
+            Q.whois = IS_BROKER;
+            Q.seqNo = -1;
+            Q.isQuery = 1;
+            Q.BROKER_ID = m.BROKER_ID;
+            strcpy(Q.topic, m.topic);
+
+            printf("Sending Query Message to Broker\n");
+            void *ptr = &Q;
+            write(leftFD, (char *) ptr, sizeof(Q));
+
+            printf("Waiting for Replay from Broker\n");
+
+            struct Message response;
+            bzero(&response, sizeof(response));
+
+            printf("received response from Broker\n");
+            read(leftFD, &response, MESSAGE_SIZE);
+            perror("Error leftFD");
+            printf("response = %s\n", response.content);
+
+            printf("Sending Received response to subscriber\n");
+            void *ptr2 = &response;
+            write(confd, (char *) ptr2, sizeof(response));
+            perror("Error confd");
+
+            close(leftFD);         
+        } else {
+            printf("No topic found in entire topology\n");
+
+            struct Message emptyM;
+            bzero(&emptyM, sizeof(emptyM));
+
+            strcpy(emptyM.topic, m.topic);
+            strcpy(emptyM.content, "EOF");
+
+            void *ptr = &emptyM;
+            write(confd, (char *) ptr, sizeof(emptyM));
+        }
+    } else {
+        printf("Topic EXISTS\n");
+
+        struct Message response;
+
+        chdir(MESSAGE_PATH);
+        chdir(m.topic);
+
+        char file_name[20];
+        bzero(file_name, sizeof(file_name));
+
+        sprintf(file_name, "%d", get_start_counter_hash(m.topic));
+        printf("reading from file %s\n", file_name);
+
+        FILE *fp;
+        fp = fopen(file_name, "r");
+
+        char c;
+        int ind = 0;
+
+        while ((c = fgetc(fp)) != EOF)
+            response.content[ind++] = c;
+
+        response.content[ind] = '\0';
+
+        printf("got data = %s\n", response.content);
+
+        printf("deleting Message\n");
+        remove(file_name);
+
+        response.whois = IS_BROKER;
+        response.isQuery = 1;
+        response.gotIt = 1;
+
+        chdir("..");
+        chdir("..");
+
+        printf("Sending data to broker\n");
+        void *ptr = &response;
+        write(confd, (char *) ptr, sizeof(response));
+    }
 }
 
 void
@@ -207,24 +359,7 @@ readFromFD() {
 }
 
 void
-create_client_socket(char *ipAdd, char *port) {
-    // socket create
-	leftFD = socket(AF_INET, SOCK_STREAM, 0);
-	if (leftFD == -1) { 
-		printf("socket creation failed...\n"); 
-		close(leftFD);
-		return; 
-	}
-	
-	bzero(&servaddr, sizeof(servaddr));
-
-	servaddr.sin_family = AF_INET;
-	servaddr.sin_addr.s_addr = inet_addr(ipAdd); 
-	servaddr.sin_port = htons(atoi(port));
-}
-
-void
-create_socket(char *port) {
+create_socket(char *serport) {
     // creating server socket file descriptor
     if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Socket creation failed !!\n");
@@ -241,7 +376,7 @@ create_socket(char *port) {
     srv_addr.sin_family = AF_INET;
     // Accept any connection
     srv_addr.sin_addr.s_addr = INADDR_ANY;
-    srv_addr.sin_port = htons(atoi(port));
+    srv_addr.sin_port = htons(atoi(serport));
 
     int enable = 1;
     setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));

@@ -7,6 +7,7 @@ by PUBLISHER
 int i;
 int j;
 int sfd;
+int done = 0;
 
 struct sockaddr_in servaddr;
 
@@ -70,10 +71,11 @@ create_topic() {
 
     printf("Enter topic name: ");
     scanf("%s", m.topic);
+    getchar();
     printf("Your topic is %s\n", m.topic);
 
     printf("Enter content of Message: ");
-    scanf("%s", m.content);
+    fgets(m.content, CONTENT_SIZE, stdin);
 
     printf("Creating Message\n");
     m.whois = IS_PUBLISHER;
@@ -128,35 +130,47 @@ send_file() {
 
 void
 subscribe_topic() {
-
 }
 
 void
-get_Message() {
+get_Message(char *id, int user_input) {
     struct Message m;
-    printf("Enter topic name\n");
-    scanf("%s", m.topic);
+    bzero(&m, sizeof(m));
+
+    if (user_input) {
+        printf("Enter topic name\n");
+        scanf("%s", m.topic);
+    }
 
     m.seqNo = -1;
     m.isFile = -1;
     m.whois = IS_SUBSCRIBER;
+    m.isQuery = 1;
+    m.gotIt = 0;
 
     void *ptr = &m;
     write(sfd, (char *) ptr, sizeof(m));
 
     /* wait for broker's reply */
     printf("wait for Broker's reply\n");
+    bzero(&m, sizeof(m));
+    
     read(sfd, &m, MESSAGE_SIZE);
 
     printf("Message %s\n", m.content);
+    
+    if (strcmp(m.content, "EOF") == 0)
+        done = 1;
 }
 
 void
-get_Next_Message() {
+get_All_Messages(char *id) {
+    for (;;) {
+        done = 0;
+        sleep(1);
 
-}
+        get_Message(id, 0);
 
-void
-get_All_Messages() {
-
+        if (done = 1) break;
+    }
 }
